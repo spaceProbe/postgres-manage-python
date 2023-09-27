@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 from tempfile import mkstemp
+import re
 
 import configparser
 import gzip
@@ -48,7 +49,9 @@ def download_from_s3(backup_s3_key, dest_file, manager_config):
 
 def list_available_backups(storage_engine, manager_config):
     key_list = []
+    backup_list = []
     if storage_engine == 'LOCAL':
+        print("Got here")
         try:
             backup_folder = manager_config.get('LOCAL_BACKUP_PATH')
             backup_list = os.listdir(backup_folder)
@@ -286,6 +289,10 @@ def main():
     args_parser.add_argument("--date",
                              metavar="YYYY-MM-dd",
                              help="Date to use for restore (show with --action list)")
+    args_parser.add_argument("--latest",
+                             default=False,
+                             action='store_true',
+                             help="Restore from the newest backup")
     args_parser.add_argument("--dest-db",
                              metavar="dest_db",
                              default=None,
@@ -310,7 +317,7 @@ def main():
     aws_bucket_name = config.get('S3', 'bucket_name')
     aws_bucket_path = config.get('S3', 'bucket_backup_path')
     storage_engine = config.get('setup', 'storage_engine')
-    timestr = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    timestr = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     filename = 'backup-{}-{}.dump'.format(timestr, postgres_db)
     filename_compressed = '{}.gz'.format(filename)
     restore_filename = '/tmp/restore.dump.gz'
@@ -324,7 +331,7 @@ def main():
         'LOCAL_BACKUP_PATH': local_storage_path
     }
 
-    local_file_path = '{}{}'.format(manager_config.get('BACKUP_PATH'), filename)
+    local_file_path = '{}{}'.format(manager_config.get('LOCAL_BACKUP_PATH'), filename)
 
     # list task
     if args.action == "list":
@@ -366,7 +373,16 @@ def main():
             logger.info("Uploaded to {}".format(filename_compressed))
     # restore task
     elif args.action == "restore":
+        date = []
         if not args.date:
+            date = False
+        else:
+            date = args.date
+
+        if args.latest:
+            date = True
+
+        if not date:
             logger.warn('No date was chosen for restore. Run again with the "list" '
                         'action to see available restore dates')
         else:
@@ -375,7 +391,24 @@ def main():
             except Exception as e:
                 logger.info(e)
             all_backup_keys = list_available_backups(storage_engine, manager_config)
-            backup_match = [s for s in all_backup_keys if args.date in s]
+            if not args.latest:
+                backup_match = [s for s in all_backup_keys if date in s]
+            else:
+                date_strings = []
+                date_times = []
+                for s in all_backup_keys:
+                    match_str = re.search(r'\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}', s)
+                    print(match_str.group())
+                    date_strings.append(match_str.group())
+                    date_times.append(datetime.datetime.strptime(match_str.group(), '%Y-%m-%d-%H-%M-%S'))
+
+                now = datetime.datetime.now()
+                delta = (dt for dt in date_times if dt < now)
+                youngest = max(delta)
+                backup_match = [s for s in all_backup_keys if youngest.strftime('%Y-%m-%d-%H-%M-%S') in s]
+
+
+
             if backup_match:
                 logger.info("Found the following backup : {}".format(backup_match))
             else:
