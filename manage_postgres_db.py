@@ -116,6 +116,7 @@ def backup_postgres_db(host, database_name, port, user, password, dest_file, ver
         try:
             process = subprocess.Popen(
                 ['pg_dump',
+                 '-Fc',
                  '--dbname=postgresql://{}:{}@{}:{}/{}'.format(user, password, host, port, database_name),
                  '-f', dest_file],
                 stdout=subprocess.PIPE
@@ -237,12 +238,12 @@ def create_db(db_host, database, db_port, user_name, user_password):
                     "FROM pg_stat_activity "
                     "WHERE pid <> pg_backend_pid( ) "
                     "AND datname = '{}'".format(database))
-        cur.execute("DROP DATABASE IF EXISTS {} ;".format(database))
+        cur.execute("DROP DATABASE IF EXISTS \"{}\" ;".format(database))
     except Exception as e:
         print(e)
         exit(1)
-    cur.execute("CREATE DATABASE {} ;".format(database))
-    cur.execute("GRANT ALL PRIVILEGES ON DATABASE {} TO {} ;".format(database, user_name))
+    cur.execute("CREATE DATABASE \"{}\" ;".format(database))
+    cur.execute("GRANT ALL PRIVILEGES ON DATABASE \"{}\" TO {} ;".format(database, user_name))
     return database
 
 
@@ -257,7 +258,7 @@ def swap_after_restore(db_host, restore_database, new_active_database, db_port, 
                     "FROM pg_stat_activity "
                     "WHERE pid <> pg_backend_pid( ) "
                     "AND datname = '{}'".format(new_active_database))
-        cur.execute("DROP DATABASE IF EXISTS {}".format(new_active_database))
+        cur.execute("DROP DATABASE IF EXISTS \"{}\"".format(new_active_database))
         cur.execute('ALTER DATABASE "{}" RENAME TO "{}";'.format(restore_database, new_active_database))
     except Exception as e:
         print(e)
